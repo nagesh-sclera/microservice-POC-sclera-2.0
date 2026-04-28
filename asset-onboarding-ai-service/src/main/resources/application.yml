@@ -1,0 +1,34 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: asset-onboarding-ai-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/vdms
+    username: root
+    password: mypass123
+    hikari:
+      maximum-pool-size: 20
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+services:
+  asset-service:
+    base-url: lb://asset-service
+  asset-onboarding-service:
+    base-url: lb://asset-onboarding-service
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+
+ai:
+  external-endpoint: https://ai.sclera.com/
+  match-threshold: 70    # minimum score to auto-suggest a match

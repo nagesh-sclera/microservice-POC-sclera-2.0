@@ -1,0 +1,129 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        # ── Asset Service ──────────────────────────────────────────
+        - id: asset-service
+          uri: lb://asset-service
+          predicates:
+            - Path=/api/devices/**
+          filters:
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE,GATEWAY_TIMEOUT
+                methods: GET,POST,PUT
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+            - name: CircuitBreaker
+              args:
+                name: assetServiceCB
+
+        # ── Asset Onboard Service ──────────────────────────────────
+        - id: asset-onboard-service
+          uri: lb://asset-onboard-service
+          predicates:
+            - Path=/api/onboard/**
+          filters:
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE,GATEWAY_TIMEOUT
+                methods: GET,POST,PUT
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+            - name: CircuitBreaker
+              args:
+                name: assetOnboardServiceCB
+
+        # ── Asset Onboarding Service ───────────────────────────────
+        - id: asset-onboarding-service
+          uri: lb://asset-onboarding-service
+          predicates:
+            - Path=/api/assets/**
+          filters:
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE,GATEWAY_TIMEOUT
+                methods: GET,POST,PUT
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+            - name: CircuitBreaker
+              args:
+                name: assetOnboardingServiceCB
+
+        # ── Asset Onboarding AI Service ────────────────────────────
+        - id: asset-onboarding-ai-service
+          uri: lb://asset-onboarding-ai-service
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE,GATEWAY_TIMEOUT
+                methods: GET,POST,PUT
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+            - name: CircuitBreaker
+              args:
+                name: assetOnboardingAiServiceCB
+
+# ── Resilience4j Circuit Breaker ────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      assetServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+
+      assetOnboardServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+
+      assetOnboardingServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+
+      assetOnboardingAiServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+
+# ── Eureka ───────────────────────────────────────────────────────────
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    registry-fetch-interval-seconds: 5
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 15
+
+# ── Logging ──────────────────────────────────────────────────────────
+logging:
+  level:
+    io.sclera: INFO
+    org.springframework.cloud.gateway: INFO
+    io.github.resilience4j: INFO
