@@ -15,5 +15,7 @@
         <module>asset-onboard-service</module>
         <module>asset-onboarding-service</module>
         <module>asset-onboarding-ai-service</module>
+        <module>device-lifecycle-service</module>
+        <module>device-specification-service</module>
     </modules>
 </project>

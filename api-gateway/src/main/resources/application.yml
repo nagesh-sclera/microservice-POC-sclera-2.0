@@ -82,6 +82,42 @@ spring:
               args:
                 name: assetOnboardingAiServiceCB
 
+        # ── Device Lifecycle Service ───────────────────────────────
+        - id: device-lifecycle-service
+          uri: lb://device-lifecycle-service
+          predicates:
+            - Path=/api/device-lifecycle/**
+          filters:
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE,GATEWAY_TIMEOUT
+                methods: GET,POST,PUT,DELETE
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+            - name: CircuitBreaker
+              args:
+                name: deviceLifecycleServiceCB
+
+        # ── Device Specification Service ───────────────────────────
+        - id: device-specification-service
+          uri: lb://device-specification-service
+          predicates:
+            - Path=/api/device-specification/**
+          filters:
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,SERVICE_UNAVAILABLE,GATEWAY_TIMEOUT
+                methods: GET,POST,PUT,DELETE
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+            - name: CircuitBreaker
+              args:
+                name: deviceSpecificationServiceCB
+
 # ── Resilience4j Circuit Breaker ────────────────────────────────────
 resilience4j:
   circuitbreaker:
@@ -105,6 +141,18 @@ resilience4j:
         permittedNumberOfCallsInHalfOpenState: 3
 
       assetOnboardingAiServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+
+      deviceLifecycleServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+
+      deviceSpecificationServiceCB:
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 10s
