@@ -5,6 +5,8 @@
 **Scenario:** Device deletion must cascade to:
 - `device_onboard_status` (asset-onboard-service)
 - `asset_device_mapping` (asset-onboarding-service)
+- `device_lifecycle_history` (device-lifecycle-service)
+- `device_specification` / `device_network_specification` / `device_installed_apps` (device-specification-service)
 
 **Risk:** With shared DB but separate services, cascades no longer happen automatically.
 A DELETE on `device` will violate FK constraints if child records exist (unless FK is removed).
@@ -24,7 +26,7 @@ A DELETE on `device` will violate FK constraints if child records exist (unless 
 ## 2. API Gateway – Single Point of Failure (HIGH RISK)
 
 **Scenario:** All client traffic flows through `api-gateway` (port 8080). If it crashes or is
-unreachable, all 4 downstream services become inaccessible regardless of their health.
+unreachable, all 6 downstream services become inaccessible regardless of their health.
 
 **Risk:** One misconfigured route or OOM in the gateway takes down the entire system.
 
@@ -70,7 +72,8 @@ eureka:
 
 ## 5. Tight Coupling via Synchronous WebClient (MEDIUM RISK)
 
-**Risk:** If asset-service is down, asset-onboard-service and asset-onboarding-service fail.
+**Risk:** If asset-service is down, all 5 downstream services fail (asset-onboard-service,
+asset-onboarding-service, asset-onboarding-ai-service, device-lifecycle-service, device-specification-service all call it).
 
 **Mitigation:**
 - Circuit breaker: Add **Resilience4j** `@CircuitBreaker` on WebClient calls
@@ -90,7 +93,37 @@ resilience4j:
 
 ---
 
-## 6. Idempotency (LOW RISK)
+## 6. External Service Dependencies – Out-of-Repo Services (MEDIUM RISK)
+
+**Scenario:** device-lifecycle-service calls `inventory-service` for retire flow.
+device-specification-service calls `inventory-service`, `user-service`, and `managed-software-service`
+in a single spec ingest request.
+
+**Risk:** Unavailability of any external service blocks the full request; no fallback is defined.
+
+**Mitigation:**
+- Wrap all external calls with `@CircuitBreaker` + fallback that returns HTTP 503 or queues the work
+- For fire-and-forget calls (e.g., `notify-new-device`), use async WebClient `.subscribe()` instead of `.block()`
+- Document SLA dependencies: device-specification ingest degrades gracefully if managed-software-service is down (skip software inserts, log for retry)
+
+---
+
+## 7. Complex Orchestration in device-specification-service (MEDIUM RISK)
+
+**Scenario:** A single POST to `/api/device-specification/devicespecification` may call:
+asset-service (GET + multiple PATCHes), inventory-service, user-service, managed-software-service,
+and write to 3 DB tables in one request.
+
+**Risk:** Any single step failure leaves the spec in a partially-ingested state.
+
+**Mitigation:**
+- Implement an idempotent ingest key (serial number + timestamp) to allow safe retries
+- Separate sync writes (DB upserts) from async notifications (inventory/user/managed-software calls)
+- Use the Outbox pattern for managed-software-service inserts to guarantee delivery on retry
+
+---
+
+## 8. Idempotency (LOW RISK)
 
 **Risk:** Retry storms on network failure can cause duplicate records.
 
@@ -101,13 +134,14 @@ resilience4j:
 
 ---
 
-## 7. Rollback / Saga
+## 9. Rollback / Saga
 
-If asset-service DELETE succeeds but asset-onboard-service cleanup fails:
+If asset-service DELETE succeeds but downstream service cleanup fails:
 
 ```
 Compensating Transaction:
   1. Re-create device_onboard_status with is_removed=false
-  2. Alert via RabbitMQ dead-letter queue
-  3. Background reconciliation job re-tries cleanup
+  2. Re-create device_lifecycle_history records if applicable
+  3. Alert via RabbitMQ dead-letter queue
+  4. Background reconciliation job re-tries cleanup
 ```

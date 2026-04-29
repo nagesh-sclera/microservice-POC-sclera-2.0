@@ -1,12 +1,12 @@
 # Migration Plan – Strangler Fig Approach
 
 ## Phase 0: Preparation (Week 1-2)
-- [ ] Add integration tests covering device, asset, and onboard workflows
+- [ ] Add integration tests covering device, asset, onboard, lifecycle, and specification workflows
 - [ ] Instrument existing monolith with structured logging per domain
 - [ ] Remove all FK constraints that cross domain boundaries (keep app-level validation)
 - [ ] Add soft-delete `is_removed` column to `device_onboard_status`
 - [ ] Stand up **discovery-service** (Eureka) and **api-gateway** (Spring Cloud Gateway)
-- [ ] Verify all 6 services register with Eureka on startup
+- [ ] Verify all 8 services register with Eureka on startup
 
 ## Phase 1: Extract asset-service (Week 3-5)
 - [ ] Copy Device entity + repository + service + controller to new Spring Boot project
@@ -31,10 +31,23 @@
 - [ ] Calls existing asset-service + asset-onboarding-service via `lb://` URIs
 - [ ] Route `/api/ai/**` via gateway to new service
 
-## Phase 5: Decommission Monolith Modules (Week 13-14)
-- [ ] Remove device, asset, onboard modules from monolith
-- [ ] Validate all 4 downstream routes through api-gateway
-- [ ] Verify Eureka dashboard shows all 6 services healthy
+## Phase 5: Extract device-lifecycle-service (Week 13-14)
+- [ ] Extract DeviceLifecycleHistory domain
+- [ ] Wire WebClient calls to asset-service: PATCH operational-status, PATCH assigned-user-email, GET device, POST archive-devices
+- [ ] Wire WebClient call to inventory-service for retire flow
+- [ ] Route `/api/device-lifecycle/**` via gateway to new service
+- [ ] Validate lifecycle history, assign, unassign, and retire flows end-to-end
+
+## Phase 6: Extract device-specification-service (Week 15-16)
+- [ ] Extract DeviceSpecification, DeviceNetworkSpecification, DeviceInstalledApps domains
+- [ ] Wire WebClient calls: asset-service (device lookup + patch), inventory-service (notify new device), user-service (master-user-email), managed-software-service (insert managed software)
+- [ ] Route `/api/device-specification/**` via gateway to new service
+- [ ] Validate full spec ingest + delta spec flows with agent simulation
+
+## Phase 7: Decommission Monolith Modules (Week 17-18)
+- [ ] Remove device, asset, onboard, lifecycle, and specification modules from monolith
+- [ ] Validate all 6 downstream routes through api-gateway
+- [ ] Verify Eureka dashboard shows all 8 services healthy
 - [ ] Load test all services independently and through the gateway
 
 ## Rollback Strategy
