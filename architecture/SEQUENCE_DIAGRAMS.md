@@ -83,3 +83,65 @@ discovery-service    api-gateway    asset-service    asset-onboard-svc    ...oth
        │  [api-gateway resolves lb://asset-onboard-service → 8082]
        │  [...]
 ```
+
+## 5. Device Lifecycle – Assign / Retire Flow
+
+```
+Client      api-gateway     device-lifecycle-svc    asset-service     inventory-service
+  │               │                  │                    │                   │
+  │─POST addHistory?retireStatus=───►│                    │                   │
+  │               │──route──────────►│                    │                   │
+  │               │                  │──repo.getLatestAssignmentCount()──►DB  │
+  │               │                  │                    │                   │
+  │               │           [if operationalStatus changed]
+  │               │                  │──PATCH /operational-status────────►│   │
+  │               │                  │◄─204──────────────────────────────│   │
+  │               │                  │                    │                   │
+  │               │           [if retireStatus=true or false]
+  │               │                  │──PATCH /assigned-user-email (null)─►│  │
+  │               │                  │                    │                   │
+  │               │           [if retireStatus=true]
+  │               │                  │──GET /devices/{id}────────────────►│   │
+  │               │                  │◄─DeviceDTO (inventory_tracking_id)─│   │
+  │               │                  │──POST /archive-devices─────────────►│  │
+  │               │                  │──POST retire-inventory-device───────────►│
+  │               │                  │◄─200──────────────────────────────────│
+  │               │                  │                    │                   │
+  │               │                  │──INSERT device_lifecycle_history──►DB  │
+  │◄─200──────────│◄─────────────────│                    │                   │
+```
+
+## 6. Device Specification – Full Spec Ingest Flow (Agent → Service)
+
+```
+Agent       api-gateway   device-spec-svc    asset-service   inventory-svc   user-svc   managed-sw-svc
+  │               │               │                │               │             │             │
+  │─POST /devicespecification────►│                │               │             │             │
+  │               │──route───────►│                │               │             │             │
+  │               │               │──GET by serial-number─────────►│             │             │
+  │               │               │◄─DeviceDTO (or null)──────────│             │             │
+  │               │               │                │               │             │             │
+  │               │        [if deviceId == null (unknown device)]
+  │               │               │──GET master-user-email──────────────────────►│             │
+  │               │               │◄─email────────────────────────────────────│             │
+  │               │               │──POST notify-new-device────────────────────►│             │
+  │               │               │  (fire-and-forget)                          │             │
+  │               │               │                │               │             │             │
+  │               │        [if deviceId != null AND fields changed]
+  │               │               │──PATCH device-info (ip, mac, model …)──────►│             │
+  │               │               │──PATCH set-device-online──────────────────►│             │
+  │               │               │                │               │             │             │
+  │               │               │──UPSERT device_specification──►DB           │             │
+  │               │               │──UPSERT device_network_specification─►DB    │             │
+  │               │               │                │               │             │             │
+  │               │        [for each new installed app]
+  │               │               │──POST insertManagedSoftware──────────────────────────────►│
+  │               │               │◄─managedSoftwareId──────────────────────────────────────│
+  │               │               │──INSERT device_installed_apps─►DB           │             │
+  │               │               │                │               │             │             │
+  │               │        [sync child/virtual devices]
+  │               │               │──GET findByDisplayNameAndParentId─────────►│             │
+  │               │               │──POST addVirtualDevice (if not found)──────►│             │
+  │               │               │──POST onboardVirtualDevices───────────────►│             │
+  │◄─200 deviceId─│◄──────────────│                │               │             │             │
+```
